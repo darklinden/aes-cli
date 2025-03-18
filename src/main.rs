@@ -13,7 +13,7 @@ use hkdf::Hkdf;
 use sha2::Sha256;
 
 #[derive(Parser)]
-#[command(name = "aescrypt")]
+#[command(name = "aes-cli")]
 #[command(about = "Encrypt or decrypt files using AES-256", long_about = None)]
 struct Cli {
     #[command(subcommand)]
