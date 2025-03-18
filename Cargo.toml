@@ -1,0 +1,17 @@
+[package]
+name = "aes-cli"
+version = "0.1.0"
+edition = "2021"
+description = "A command line tool to encrypt and decrypt files with AES-256"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+aes-gcm = "0.10.2"
+rand = "0.9.0"
+anyhow = "1.0"
+sha2 = "0.10"
+hkdf = "0.12"
+base64 = "0.22.1"
+
+[dev-dependencies]
+tempfile = "3.19.0"
