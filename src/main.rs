@@ -60,7 +60,7 @@ fn main() -> Result<()> {
                         if path.is_file() {
                             let input_file = path.to_str().unwrap();
                             let tmp_file = format!("{}.aes_enc_{}", input_file, rnd);
-                            let result = encrypt_file(&input_file, &tmp_file, &password);
+                            let result = encrypt_file(input_file, &tmp_file, &password);
                             match result {
                                 Ok(_) => {
                                     success_files.push(input_file.to_string());
@@ -104,7 +104,7 @@ fn main() -> Result<()> {
                         if path.is_file() {
                             let input_file = path.to_str().unwrap();
                             let tmp_file = format!("{}.aes_dec_{}", input_file, rnd);
-                            let result = decrypt_file(&input_file, &tmp_file, &password);
+                            let result = decrypt_file(input_file, &tmp_file, &password);
                             match result {
                                 Ok(_) => {
                                     success_files.push(input_file.to_string());
