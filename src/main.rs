@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::path::{Path, PathBuf};
 
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::{
@@ -10,6 +11,8 @@ use aes_gcm::{
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use hkdf::Hkdf;
+use ignore::Walk;
+use rand::Rng;
 use sha2::Sha256;
 
 #[derive(Parser)]
@@ -25,26 +28,12 @@ enum Commands {
     /// Encrypt a file using AES-256
     Enc {
         /// The input file to encrypt
-        input_file: String,
-
-        /// The output file to write the encrypted data
-        output_file: String,
-
-        /// Password to use for encryption (if not provided, AES_PWD environment variable will be used)
-        #[arg(short, long)]
-        password: Option<String>,
+        folder_path: Option<String>,
     },
     /// Decrypt a file encrypted with AES-256
     Dec {
         /// The encrypted input file
-        input_file: String,
-
-        /// The output file to write the decrypted data
-        output_file: String,
-
-        /// Password used for encryption (if not provided, AES_PWD environment variable will be used)
-        #[arg(short, long)]
-        password: Option<String>,
+        folder_path: Option<String>,
     },
 }
 
@@ -52,36 +41,97 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Enc {
-            input_file,
-            output_file,
-            password,
-        } => {
-            let pwd = get_password(password)?;
-            encrypt_file(&input_file, &output_file, &pwd).context("Failed to encrypt file")?;
-            println!("File encrypted successfully: {}", output_file);
+        Commands::Enc { folder_path } => {
+            let folder_path: PathBuf = match folder_path {
+                Some(folder_path) => Path::new(&folder_path).to_path_buf(),
+                None => env::current_dir()?,
+            };
+            let password = env::var("AES_PWD")
+                .context("Password not provided and AES_PWD environment variable not set")?;
+            let mut success_files = Vec::new();
+            let mut failed_files = Vec::new();
+            let rnd: i64 = rand::rng().random();
+            for result in Walk::new(folder_path) {
+                // Each item yielded by the iterator is either a directory entry or an
+                // error, so either print the path or the error.
+                match result {
+                    Ok(entry) => {
+                        let path = entry.path();
+                        if path.is_file() {
+                            let input_file = path.to_str().unwrap();
+                            let tmp_file = format!("{}.aes_enc_{}", input_file, rnd);
+                            let result = encrypt_file(&input_file, &tmp_file, &password);
+                            match result {
+                                Ok(_) => {
+                                    success_files.push(input_file.to_string());
+                                    std::fs::remove_file(input_file)?;
+                                    std::fs::rename(tmp_file, input_file)?;
+                                    println!("File encrypted successfully: {}", input_file);
+                                }
+                                Err(err) => {
+                                    failed_files.push(input_file.to_string());
+                                    println!("ERROR: {}", err);
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => println!("ERROR: {}", err),
+                }
+            }
+            if !failed_files.is_empty() {
+                println!("Failed to encrypt the following files:");
+                for file in failed_files {
+                    println!("{}", file);
+                }
+            }
         }
-        Commands::Dec {
-            input_file,
-            output_file,
-            password,
-        } => {
-            let pwd = get_password(password)?;
-            decrypt_file(&input_file, &output_file, &pwd).context("Failed to decrypt file")?;
-            println!("File decrypted successfully: {}", output_file);
+        Commands::Dec { folder_path } => {
+            let folder_path: PathBuf = match folder_path {
+                Some(folder_path) => Path::new(&folder_path).to_path_buf(),
+                None => env::current_dir()?,
+            };
+            let password = env::var("AES_PWD")
+                .context("Password not provided and AES_PWD environment variable not set")?;
+            let mut success_files = Vec::new();
+            let mut failed_files = Vec::new();
+            let rnd: i64 = rand::rng().random();
+            for result in Walk::new(folder_path) {
+                // Each item yielded by the iterator is either a directory entry or an
+                // error, so either print the path or the error.
+                match result {
+                    Ok(entry) => {
+                        let path = entry.path();
+                        if path.is_file() {
+                            let input_file = path.to_str().unwrap();
+                            let tmp_file = format!("{}.aes_dec_{}", input_file, rnd);
+                            let result = decrypt_file(&input_file, &tmp_file, &password);
+                            match result {
+                                Ok(_) => {
+                                    success_files.push(input_file.to_string());
+                                    std::fs::remove_file(input_file)?;
+                                    std::fs::rename(tmp_file, input_file)?;
+                                    println!("File decrypted successfully: {}", input_file);
+                                }
+                                Err(err) => {
+                                    failed_files.push(input_file.to_string());
+                                    println!("ERROR: {}", err);
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => println!("ERROR: {}", err),
+                }
+            }
+            if !failed_files.is_empty() {
+                println!("Failed to decrypt the following files:");
+                for file in failed_files {
+                    println!("{}", file);
+                }
+            }
         }
     }
 
     Ok(())
-}
-
-// Helper function to get password from argument or environment variable
-fn get_password(password_arg: Option<String>) -> Result<String> {
-    match password_arg {
-        Some(pwd) => Ok(pwd),
-        None => env::var("AES_PWD")
-            .context("Password not provided and AES_PWD environment variable not set"),
-    }
 }
 
 fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; 32]> {

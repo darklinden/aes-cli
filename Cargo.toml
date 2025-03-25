@@ -12,6 +12,7 @@ anyhow = "1.0"
 sha2 = "0.10"
 hkdf = "0.12"
 base64 = "0.22.1"
+ignore = "0.4.23"
 
 [dev-dependencies]
 tempfile = "3.19.0"
